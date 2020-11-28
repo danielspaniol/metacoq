@@ -1,0 +1,28 @@
+opam-version: "2.0"
+maintainer: ""
+homepage: "https://metacoq.github.io/metacoq"
+dev-repo: "git+https://github.com/MetaCoq/metacoq.git#coq-8.11"
+bug-reports: "https://github.com/MetaCoq/metacoq/issues"
+authors: ["Daniel Spaniol"]
+license: "MIT"
+build: [
+  ["sh" "./configure.sh"]
+  [make "-j%{jobs}%" "-C" "erasure"]
+]
+install: [
+  [make "-C" "erasure" "install"]
+]
+depends: [
+  "ocaml" {>= "4.07.1"}
+  "coq" {>= "8.11" & < "8.12~"}
+  "coq-metacoq-template" {= version}
+  "coq-metacoq-checker" {= version}
+  "coq-metacoq-pcuic" {= version}
+  "coq-metacoq-safechecker" {= version}
+]
+synopsis: "Implementation and verification of an eta expansion for Coq constructors"
+description: """
+MetaCoq is a meta-programming framework for Coq.
+
+TODO
+"""

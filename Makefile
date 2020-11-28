@@ -1,8 +1,8 @@
 TIMED ?=
 
-all: template-coq checker pcuic safechecker erasure examples
+all: template-coq checker pcuic safechecker erasure etaexpand examples
 
-.PHONY: all template-coq checker pcuic erasure install html clean mrproper .merlin test-suite translations
+.PHONY: all template-coq checker pcuic erasure etaexpand install html clean mrproper .merlin test-suite translations
 
 install: all
 	$(MAKE) -C template-coq install
@@ -10,6 +10,7 @@ install: all
 	$(MAKE) -C pcuic install
 	$(MAKE) -C safechecker install
 	$(MAKE) -C erasure install
+	$(MAKE) -C eta-expansion install
 	$(MAKE) -C translations install
 
 uninstall: all
@@ -18,6 +19,7 @@ uninstall: all
 	$(MAKE) -C pcuic uninstall
 	$(MAKE) -C safechecker uninstall
 	$(MAKE) -C erasure uninstall
+	$(MAKE) -C eta-expansion uninstall
 	$(MAKE) -C translations uninstall
 
 html: all
@@ -27,6 +29,7 @@ html: all
 		-R pcuic/theories MetaCoq.PCUIC \
 		-R safechecker/theories MetaCoq.SafeChecker \
 		-R erasure/theories MetaCoq.Erasure \
+		-R eta-expansion/theories MetaCoq.EtaExpansion \
 		-R translations MetaCoq.Translations \
 		-d html */theories/*.v translations/*.v
 
@@ -36,6 +39,7 @@ clean:
 	$(MAKE) -C pcuic clean
 	$(MAKE) -C safechecker clean
 	$(MAKE) -C erasure clean
+	$(MAKE) -C eta-expansion clean
 	$(MAKE) -C examples clean
 	$(MAKE) -C test-suite clean
 	$(MAKE) -C translations clean
@@ -45,6 +49,7 @@ mrproper:
 	$(MAKE) -C pcuic mrproper
 	$(MAKE) -C safechecker mrproper
 	$(MAKE) -C erasure mrproper
+	$(MAKE) -C eta-expansion mrproper
 	$(MAKE) -C checker mrproper
 	$(MAKE) -C examples mrproper
 	$(MAKE) -C test-suite mrproper
@@ -68,6 +73,9 @@ safechecker: template-coq pcuic
 
 erasure: template-coq safechecker pcuic
 	$(MAKE) -C erasure
+
+etaexpand: template-coq safechecker pcuic
+	$(MAKE) -C eta-expansion
 
 checker: template-coq
 	$(MAKE) -C checker

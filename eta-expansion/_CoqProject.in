@@ -1,0 +1,3 @@
+-R theories MetaCoq.EtaExpansion
+
+theories/PCUICEtaExpansion.v
