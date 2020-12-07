@@ -2,4 +2,5 @@
 -R ../template-coq/theories MetaCoq.Template -I ../template-coq/build -R ../checker/theories MetaCoq.Checker -R ../pcuic/theories MetaCoq.PCUIC -R ../safechecker/theories MetaCoq.SafeChecker
 -R theories MetaCoq.EtaExpansion
 
-theories/PCUICEtaExpansion.v
+theories/PCUICEtaExpansion_Defs.v
+theories/PCUICEtaExpansion_Facts.v

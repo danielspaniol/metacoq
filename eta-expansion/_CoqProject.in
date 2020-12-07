@@ -1,3 +1,4 @@
 -R theories MetaCoq.EtaExpansion
 
-theories/PCUICEtaExpansion.v
+theories/PCUICEtaExpansion_Defs.v
+theories/PCUICEtaExpansion_Facts.v
