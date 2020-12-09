@@ -1,28 +1,50 @@
+(*******************************************************************************
+ *                   PCUIC ETA EXPANSION ON CONSTRUCTORS
+ *                   ===================================
+ *
+ * This file contains the definitions for eta-expansion of constructors.
+ * The basic idea is quite simple:
+ *    Iterate over the PCUIC AST until you find an constructor,
+ *    then call the actual eta-expansion on that constructor.
+ *
+ * The eta-expansion itself works by recursively adding lambda abstractions
+ * for each of the arguments. For example:
+ *
+ *   current term                 | remaining type
+ *  ------------------------------+--------------------------------------------
+ *  η cons                        | Π(X : U). Π(x : X). Π(xs : List X). List X
+ *  λ (η (cons 0))                | Π(x : X). Π(xs : List X). List X
+ *  λ λ (η ((cons 1) 0))          | Π(xs : List X). List X
+ *  λ λ λ (η (((cons 2) 1) 0))    | List X
+ *  λ λ λ ((cons 2) 1) 0)         |
+ ******************************************************************************)
+
 From Equations Require Import Equations.
+
 From MetaCoq.Template Require Import config.
-From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICTyping PCUICInversion PCUICSafeLemmata.
+From MetaCoq.PCUIC Require Import PCUICAst PCUICAstUtils PCUICTyping PCUICInversion PCUICSafeLemmata PCUICLiftSubst.
 From MetaCoq.SafeChecker Require Import PCUICSafeRetyping.
+
 From Coq Require Import Program ssreflect.
 
+(** Haskell's $ notation can come in handy *)
+Notation "f $ a" := (f a) (at level 50).
 
-Section EtaExpansionDefs.
+(** ** The actual η-expansion *)
+Section EtaExpansion.
 
-  Notation "f $ args" := (f args) (at level 60, only parsing).
-
-  Fixpoint map_snd {A B C} (f : B -> C) (l : list (A × B)) :=
-    match l with
-    | [] => []
-    | ((a,b) :: rest) => (a, f b)::(map_snd f rest)
+  Fixpoint eta_expand (t T : term) : term :=
+    match T with
+    | tProd na A B => tLambda na A $ eta_expand (tApp (lift0 1 t) (tRel 0)) B
+    | _            => t
     end.
+
+End EtaExpansion.
+
+(** ** Recursive transformation of PCUIC terms *)
+Section Transformation.
 
   Local Existing Instance extraction_checker_flags.
-
-  Fixpoint eta_expand (tm ty : term) (idx : nat) : term :=
-    match ty with
-    | tProd na A (tProd _ _ _ as B) => tLambda na A $ tApp (eta_expand tm B (S idx)) (tRel idx)
-    | tProd na A _                  => tLambda na A $ tApp tm (tRel idx)
-    | _                             => tm
-    end.
 
   Section TransBrs.
     Context (trans : forall (Σ : global_env_ext) (Γ : context) (HΣ : ∥ wf_ext Σ ∥) (t : term) (Ht : welltyped Σ Γ t), term).
@@ -57,8 +79,8 @@ Section EtaExpansionDefs.
       trans Σ Γ HΣ (tConst k ui)         Ht => tConst k ui ;
       trans Σ Γ HΣ (tInd ind ui)         Ht => tInd ind ui ;
       trans Σ Γ HΣ (tConstruct ind n ui) Ht => let tm := tConstruct ind n ui in
-                                         let ty := type_of Σ _ _ Γ tm Ht in
-                                         eta_expand tm ty 0 ;
+                                              let ty := type_of Σ _ _ Γ tm Ht in
+                                              eta_expand tm ty ;
       trans Σ Γ HΣ (tCase indn p c brs)  Ht => tCase indn $ trans Σ Γ HΣ p _ $ trans Σ Γ HΣ c _ $ trans_brs trans Σ Γ HΣ brs _ ;
       trans Σ Γ HΣ (tProj p c)           Ht => tProj p $ trans Σ Γ HΣ c _ ;
       trans Σ Γ HΣ (tFix mfix idx)       Ht => tFix $ trans_mfix trans Σ Γ HΣ mfix _ $ idx ;
@@ -91,7 +113,7 @@ Section EtaExpansionDefs.
       eexists; eauto.
   Qed.
 
-  Program Definition trans_constant_body Σ Γ HΣ body : constant_body :=
+  Program Definition trans_constant_body Σ Γ HΣ (Hwf : ∥ wf_local Σ Γ ∥) body : constant_body :=
     if body.(cst_body) is Some tm
     then
       {|
@@ -100,11 +122,9 @@ Section EtaExpansionDefs.
         cst_universes := body.(cst_universes) ;
       |}
     else body.
-  Next Obligation.
-    exists body.(cst_type). todo "this should be correct".
-  Qed.
+  Admit Obligations. (* TODO: How to use wf_local here? *)
 
-  Program Definition trans_context_decl Σ Γ HΣ decl : context_decl :=
+  Program Definition trans_context_decl Σ Γ HΣ (Hwf : ∥ wf_local Σ Γ∥) decl : context_decl :=
     if decl.(decl_body) is Some tm
     then
       {|
@@ -113,17 +133,14 @@ Section EtaExpansionDefs.
         decl_type := decl.(decl_type) ;
       |}
     else decl.
-  Next Obligation.
-    exists decl.(decl_type). todo "this should be correct".
-  Qed.
+  Admit Obligations. (* TODO: How to use wf_local here? *)
 
-  Definition trans_env Σ Γ HΣ :=
+  Definition trans_env Σ Γ HΣ Hwf :=
     let go decl := if decl is ConstantDecl b
-                   then ConstantDecl $ trans_constant_body Σ Γ HΣ b
+                   then ConstantDecl $ trans_constant_body Σ Γ HΣ Hwf b
                    else decl in
-    ((map_snd go Σ.1), Σ.2).
+    (map (on_snd go) Σ.1, Σ.2).
 
-  Definition trans_ctx Σ Γ HΣ := map (trans_context_decl Σ Γ HΣ) Γ.
+  Definition trans_ctx Σ Γ HΣ Hwf := map (trans_context_decl Σ Γ HΣ Hwf) Γ.
 
-
-End EtaExpansionDefs.
+End Transformation.
