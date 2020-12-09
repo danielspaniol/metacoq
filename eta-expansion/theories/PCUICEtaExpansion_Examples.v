@@ -41,26 +41,40 @@ Definition testη {A} (a : A) :=
   let t  := FromTemplate.trans p.2 in
   let ηt := Eta.trans Σ [] (HΣ Σ) t (Hwt Σ t) in
   let t' := ToTemplate.trans ηt in
-  tmUnquoteTyped A t'.
+  a' <- tmUnquoteTyped A t' ;;
+  tmPrint a'.
 
 Unset Printing Notations.
 Set Printing Implicit.
 
-(* Eta expansion works on both constructors of nat (so non-function constructors are no problem) *)
-MetaCoq Run (tm <- testη 0 ;; tmPrint tm).
-MetaCoq Run (tm <- testη S ;; tmPrint tm).
+MetaCoq Run (testη 0).
+(*=> O *)
+MetaCoq Run (testη S).
+(*=> (fun H : nat => S H) *)
 
-(* Eta expansion works on both constructors of list (so multiple arguments are no problem) *)
-MetaCoq Run (tm <- testη (@cons) ;; tmPrint tm).
-MetaCoq Run (tm <- testη (@nil) ;; tmPrint tm).
+MetaCoq Run (testη (@cons)).
+(*=> (fun (A : Type) (H : A) (H0 : list A) => @cons A H H0) *)
+MetaCoq Run (testη (@nil)).
+(*=> (fun A : Type => @nil A) *)
 
-(* Eta expansion works on both constructors of vectors (so more involved dependent types are no problem) *)
-MetaCoq Run (tm <- testη (@Vector.cons) ;; tmPrint tm).
-MetaCoq Run (tm <- testη (@Vector.nil) ;; tmPrint tm).
+MetaCoq Run (testη (@Vector.cons)).
+(*=> (fun (A : Type) (h : A) (n : nat) (H : VectorDef.t A n) => VectorDef.cons A h n H)*)
+MetaCoq Run (testη (@Vector.nil)).
+(*=> (fun A : Type => VectorDef.nil A)*)
 
-(* Eta expansion looks recursively in the term *)
-MetaCoq Run (tm <- testη (fun X x xs => @cons X x xs) ;; tmPrint tm).
+MetaCoq Run (testη (fun X x xs => @cons X x xs)).
+(*=> (fun (X : Type) (x : X) (xs : list X) => (fun (A : Type) (H : A) (H0 : list A) => @cons A H H0) X x xs) *)
 
-(* Some more complex expressions work too *)
-MetaCoq Run (tm <- testη (if 1 is 0 then bool else Vector.t (list (Vector.t bool 1)) 2) ;; tmPrint tm).
+MetaCoq Run (testη (if 1 is 0 then bool else Vector.t (list (Vector.t bool 1)) 2)).
+(*=> match (fun H : nat => S H) O with
+     | O => bool
+     | S _ => VectorDef.t (list (VectorDef.t bool ((fun H : nat => S H) O))) ((fun H : nat => S H) ((fun H : nat => S H) O))
+     end *)
 
+Inductive rosetree T := mkTree of T & list $ rosetree T.
+MetaCoq Run (testη mkTree).
+(*=> (fun (T : Type) (H : T) (H0 : list (rosetree T)) => mkTree T H H0) *)
+
+Inductive SN {X} (R : X -> X -> Prop) x := sn of forall y, R x y -> SN R y.
+MetaCoq Run (testη (@sn)).
+(*=> (fun (X : Type) (R : forall (_ : X) (_ : X), Prop) (x : X) (H : forall (y : X) (_ : R x y), @SN X R y) => @sn X R x H) *)
