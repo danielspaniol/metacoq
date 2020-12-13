@@ -4,3 +4,4 @@
 
 theories/PCUICEtaExpansion_Defs.v
 theories/PCUICEtaExpansion_Facts.v
+theories/PCUICEtaExpansion_Examples.v

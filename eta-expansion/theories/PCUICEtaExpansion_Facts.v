@@ -18,7 +18,7 @@ Section TransCtxFacts.
 
   Lemma trans_ctx_nth n decl :
     nth_error Γ n = Some decl ->
-    nth_error (trans_ctx Σ Γ HΣ Hwf) n = Some (trans_context_decl Σ Γ HΣ Hwf decl).
+    nth_error (trans_ctx Σ HΣ Γ) n = Some (trans_context_decl Σ HΣ Γ decl).
   Proof.
       by apply: map_nth_error.
   Qed.
@@ -37,7 +37,7 @@ Section TransEnvFacts.
   Context (Γ : context) (Hwf : ∥ wf_local Σ Γ∥).
 
   Lemma trans_env_global_ext_levels :
-    global_ext_levels Σ = global_ext_levels (trans_env Σ Γ HΣ Hwf).
+    global_ext_levels Σ = global_ext_levels (trans_env Σ HΣ Γ).
   Proof.
     elim: Σ HΣ Hwf => /=.
     todo "small bookkeeping".
@@ -57,7 +57,7 @@ Section HelperFacts.
   Context (Γ : context) (Hwf : ∥ wf_local Σ Γ∥).
 
   Lemma trans_wt_invariant tm Htm1 Htm2 :
-    trans Σ Γ HΣ tm Htm1 = trans Σ Γ HΣ tm Htm2.
+    trans Σ HΣ Γ tm Htm1 = trans Σ HΣ Γ tm Htm2.
   Proof.
   Admitted.
 
@@ -81,8 +81,6 @@ End EtaExpandFacts.
 
 Section TransFacts.
 
-  Local Existing Instance extraction_checker_flags.
-
   (* Small helper to collect all eta-expansions of the same term.
      This uses the fact that the translation is invariant in the welltyped-proof *)
   Ltac collect old_name new_name :=
@@ -104,34 +102,36 @@ Section TransFacts.
   Lemma trans_preservation `{cf : checker_flags} :
     env_prop
       (fun Σ Γ t T =>
-         forall HΣ Hwf HηΣ Ht HT,
-         let ηΣ := trans_env Σ Γ HΣ Hwf in
-         let ηΓ := trans_ctx Σ Γ HΣ Hwf in
-         let ηt := trans     ηΣ ηΓ HηΣ t Ht in
-         let ηT := trans     ηΣ ηΓ HηΣ T HT in
+         forall HΣ HηΣ Ht HT,
+         let ηΣ := trans_env Σ HΣ Γ in
+         let ηΓ := trans_ctx Σ HΣ Γ in
+         let ηt := trans     ηΣ HηΣ ηΓ t Ht in
+         let ηT := trans     ηΣ HηΣ ηΓ T HT in
           Σ ;;;  Γ |-  t :  T ->
          ηΣ ;;; ηΓ |- ηt : ηT)
       (fun Σ Γ _ =>
-         forall HΣ Hwf,
-         let ηΣ := trans_env Σ Γ HΣ Hwf in
-         let ηΓ := trans_ctx Σ Γ HΣ Hwf in
+         forall HΣ,
+         let ηΣ := trans_env Σ HΣ Γ in
+         let ηΓ := trans_ctx Σ HΣ Γ in
          wf_local ηΣ ηΓ).
   Proof.
     cbn ; apply: typing_ind_env => Σ wfΣ Γ wfΓ.
 
-    - move=> H HΣ Hwf.
+    - move=> H HΣ.
       todo "show that the translated context is still wf_local".
 
-    - move=> n [na body ty] /trans_ctx_nth nth_decl IH Hwf HΣ Ht HT H Hlift /=.
+    - move=> n [na body ty] /trans_ctx_nth nth_decl IH HΣ Ht HT H Hlift /=.
       simp trans.
       todo "should be an easy lookup in the context now".
 
-    - move=> ℓ IH ℓ_in_ℓs Hwf HΣ Ht HT H ?.
+    - move=> ℓ IH ℓ_in_ℓs HΣ Ht HT H ?.
       simp trans. constructor.
       + apply: IH.
-      + by rewrite -trans_env_global_ext_levels.
+      + rewrite -trans_env_global_ext_levels.
+        * constructor. todo "problems with extraction_flags...".
+        * done.
 
-    - move=> na A b ℓ1 ℓ2 IH HA IHA HB IHB Hwf HΣ HηΣ Ht HT H.
+    - move=> na A b ℓ1 ℓ2 IH HA IHA HB IHB HΣ HηΣ Ht HT H.
       simp trans. constructor.
       + apply: IHA ; last done.
         case: Ht => ? /inversion_Prod [].
@@ -140,7 +140,7 @@ Section TransFacts.
       + collect A ηA. collect b ηbA.
         todo "should be an easy lookup now".
 
-    - move=> na A b ℓ B IH HA IHA Hb IHb HB IHB Hwf HΣ HT H.
+    - move=> na A b ℓ B IH HA IHA Hb IHb HB IHB HΣ HT H.
       simp trans.
       collect b ηb ; collect B ηB ; collect A ηA.
       collect A foo ; (have: foo = ηA by todo "this step should work by `collect` alone...") ; move=> -> ; clear foo.
@@ -148,7 +148,7 @@ Section TransFacts.
       + apply: IHA ; last done. todo "show tSort ℓ is welltyped, this should be easy".
       + todo "this needs some massaging, then it should follow from IHb".
 
-    - move=> na b B t ℓ T HΣ Hℓ IH IHb HB IHB Ht IHT Hwf HηΣ Hwt HWT H.
+    - move=> na b B t ℓ T HΣ Hℓ IH IHb HB IHB Ht IHT HηΣ Hwt HWT H.
       simp trans.
       collect T ηT ; collect t ηt ; collect b ηb ; collect B ηB ; collect b ηb' ; collect B ηB'.
       have: ηb = ηb'.
@@ -161,51 +161,49 @@ Section TransFacts.
       + by apply: HB.
       + todo "this needs some massaging, then it should follow from IHt".
 
-    - move=> t na A B u IH Ht IHt Hu IHu HΣ Hwf HηΣ Hwt HWT H.
+    - move=> t na A B u IH Ht IHt Hu IHu HΣ HηΣ Hwt HWT H.
       simp trans.
       collect u ηu. collect t ηt. collect (B{0:=u}) ηB.
       todo "not sure how to use substitution here...".
 
-    - move=> cst u decl IH H1 Hdecl Hconsistent HΣ Hwf HηΣ Ht HT H.
+    - move=> cst u decl IH H1 Hdecl Hconsistent HΣ HηΣ Ht HT H.
       simp trans.
       todo "should be an easy lookup".
 
-    - move=> ind u mdecl idecl Hdecl IH Hloc Hconsist HΣ Hwf HηΣ Ht HT H.
+    - move=> ind u mdecl idecl Hdecl IH Hloc Hconsist HΣ HηΣ Ht HT H.
       simp trans.
       todo "should be an easy lookup".
 
-    - move=> ind i u mdecl idecl cdecl Hdecl Hdecls IH Hconsistent HΣ Hwf HηΣ Ht HT H.
+    - move=> ind i u mdecl idecl cdecl Hdecl Hdecls IH Hconsistent HΣ HηΣ Ht HT H.
       simp trans ; cbn.
       set T := type_of _ _ _ _ _ _.
       set t := tConstruct _ _ _.
       have: trans _ _ _ _ HT = T by todo "this follows from a lookup in the global env".
       move=> ->.
-      set ηΣ := trans_env _ _ _ _.
-      set ηΓ := trans_ctx _ _ _ _.
       todo "this should be applicable, but I get an error with extraction_checker_flags...".
       (* apply (eta_expand_preservation ηΣ ηΓ t T). *)
 
     - move=> ind u npar p c brs args mdecl idecl Idecl IH Hlocal Hnpar Hfirst ps pty Hbuild Hp IHp.
       move=> Hlev Hc Hcofinite IHc btys Hmap_opton HAll2.
-      move=> HΣ Hwf HηΣ Ht HT Hcase.
+      move=> HΣ HηΣ Ht HT Hcase.
       simp trans.
       collect p ηp ; collect c ηc.
       todo "handling the branches seems like some work because we iterate over them".
 
-    - move=> p c u mdecl idecl pdecl Hdecl args Hforall Hlocal Hc IHc Hargs Hpdecl HΣ Hwf HηΣ Ht HT H.
+    - move=> p c u mdecl idecl pdecl Hdecl args Hforall Hlocal Hc IHc Hargs Hpdecl HΣ HηΣ Ht HT H.
       simp trans.
       collect c ηc.
       todo "handling projection seems like some work".
 
-    - move=> mfix n decl ctx Hguard Hlocal IH Hall1 Hall2 Hwffix HΣ Hwf HηΣ Ht HT Hmfix.
+    - move=> mfix n decl ctx Hguard Hlocal IH Hall1 Hall2 Hwffix HΣ HηΣ Ht HT Hmfix.
       simp trans.
       todo "handling fixpoints seems like work because we iterate over them".
 
-    - move=> mfix n decl ctx Hguard Hlocal IH Hall1 Hall2 Hwffix HΣ Hwf HηΣ Ht HT Hmfix.
+    - move=> mfix n decl ctx Hguard Hlocal IH Hall1 Hall2 Hwffix HΣ HηΣ Ht HT Hmfix.
       simp trans.
       todo "handling fixpoints seems like work because we iterate over them".
 
-    - move=> t A B Hlocal HA IHA Harity Hlt HΣ Hwf HηΣ Hwt HWT Ht.
+    - move=> t A B Hlocal HA IHA Harity Hlt HΣ HηΣ Hwt HWT Ht.
       todo "should be an easy lookup".
 
   Admitted.

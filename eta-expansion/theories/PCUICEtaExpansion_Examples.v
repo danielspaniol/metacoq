@@ -37,9 +37,9 @@ Notation "f $ a" := (f a) (at level 50, only parsing).
 Definition testη {A} (a : A) :=
   p <- tmQuoteRec a ;;
   let Σ  := FromTemplate.trans_global $ Ast.empty_ext p.1 in
-  let ηΣ := Eta.trans_env Σ [] (HΣ Σ) (HΓ Σ) in
+  let ηΣ := Eta.trans_env Σ (HΣ Σ) [] in
   let t  := FromTemplate.trans p.2 in
-  let ηt := Eta.trans Σ [] (HΣ Σ) t (Hwt Σ t) in
+  let ηt := Eta.trans Σ (HΣ Σ) [] t (Hwt Σ t) in
   let t' := ToTemplate.trans ηt in
   a' <- tmUnquoteTyped A t' ;;
   tmPrint a'.
