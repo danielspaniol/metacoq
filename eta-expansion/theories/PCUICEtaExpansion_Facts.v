@@ -6,6 +6,26 @@ From MetaCoq.EtaExpansion Require Import PCUICEtaExpansion_Defs.
 From Coq Require Import Program ssreflect.
 
 (*******************************************************************************
+ * Translation of the context
+ ******************************************************************************)
+
+Section TransCtxFacts.
+
+  Local Existing Instance extraction_checker_flags.
+
+  Context (Σ : global_env_ext) (HΣ : ∥ wf_ext Σ ∥).
+  Context (Γ : context) (Hwf : ∥ wf_local Σ Γ∥).
+
+  Lemma trans_ctx_nth n decl :
+    nth_error Γ n = Some decl ->
+    nth_error (trans_ctx Σ Γ HΣ Hwf) n = Some (trans_context_decl Σ Γ HΣ Hwf decl).
+  Proof.
+      by apply: map_nth_error.
+  Qed.
+
+End TransCtxFacts.
+
+(*******************************************************************************
  * Translation of the global environment
  ******************************************************************************)
 
@@ -16,12 +36,11 @@ Section TransEnvFacts.
   Context (Σ : global_env_ext) (HΣ : ∥ wf_ext Σ ∥).
   Context (Γ : context) (Hwf : ∥ wf_local Σ Γ∥).
 
-  Let ηΓ := trans_ctx Σ Γ HΣ Hwf.
-  Let ηΣ := trans_env Σ Γ HΣ Hwf.
-
   Lemma trans_env_global_ext_levels :
-    global_ext_levels Σ = global_ext_levels ηΣ.
+    global_ext_levels Σ = global_ext_levels (trans_env Σ Γ HΣ Hwf).
   Proof.
+    elim: Σ HΣ Hwf => /=.
+    todo "small bookkeeping".
   Admitted.
 
 End TransEnvFacts.
@@ -52,13 +71,11 @@ Section EtaExpandFacts.
     Σ ;;; Γ |- t : T ->
     Σ ;;; Γ |- eta_expand t T : T.
   Proof.
-    elim: T => //=.
-    move=> na A HA B HB H.
+    elim: T => //= na A IHA B IHB H.
     econstructor.
-    - todo "should be easy".
-    - todo "???".
+    - todo "Show A has type tSort ?s1. This should follow from H but needs some bookkeeping".
+    - todo "Needs some bookkeeping".
   Admitted.
-
 
 End EtaExpandFacts.
 
@@ -66,15 +83,25 @@ Section TransFacts.
 
   Local Existing Instance extraction_checker_flags.
 
+  (* Small helper to collect all eta-expansions of the same term.
+     This uses the fact that the translation is invariant in the welltyped-proof *)
   Ltac collect old_name new_name :=
     let tmp_name := fresh "tmp" in
-      set new_name := trans _ _ _ old_name _ ;
-      try (set tmp_name := trans _ _ _ old_name _ ;
-           (have: new_name = tmp_name by apply: trans_wt_invariant) ;
-           move=> <- ;
-           clear tmp_name).
+    set new_name := trans _ _ _ old_name _ ;
+    try (set tmp_name := trans _ _ _ old_name _ ;
+         (have: new_name = tmp_name by apply: trans_wt_invariant) ;
+         move=> <- ;
+         clear tmp_name).
 
-  Lemma trans_preservation_prop `{cf : checker_flags} :
+  (*
+    If t has type T, then the eta-expansion of t has type eta-expansion of T.
+    Most cases here are not interesting as the transformation only recurses on the sub-terms.
+    However, the proofs for them are more challenging than expected, as they require a lot of
+    work to massage all the hypothesis to work correctly...
+    The only interesting case is the one for constructors, here we should be able to use the
+    preservation of the actual eta-expansion.
+   *)
+  Lemma trans_preservation `{cf : checker_flags} :
     env_prop
       (fun Σ Γ t T =>
          forall HΣ Hwf HηΣ Ht HT,
@@ -92,12 +119,12 @@ Section TransFacts.
   Proof.
     cbn ; apply: typing_ind_env => Σ wfΣ Γ wfΓ.
 
-    - todo "what is this?".
+    - move=> H HΣ Hwf.
+      todo "show that the translated context is still wf_local".
 
-    - move=> n d nth_decl IH Hwf HΣ Ht HT H /inversion_Rel.
-      do 3 case => ?.
+    - move=> n [na body ty] /trans_ctx_nth nth_decl IH Hwf HΣ Ht HT H Hlift /=.
       simp trans.
-      todo "I have no idea...".
+      todo "should be an easy lookup in the context now".
 
     - move=> ℓ IH ℓ_in_ℓs Hwf HΣ Ht HT H ?.
       simp trans. constructor.
@@ -108,124 +135,80 @@ Section TransFacts.
       simp trans. constructor.
       + apply: IHA ; last done.
         case: Ht => ? /inversion_Prod [].
-        * todo "just some bookkeeping".
-        * do 5 case => ? ; eexists ; eauto. todo "just some bookkeeping".
+        * todo "show trans_env Σ is wf. Should be easy".
+        * do 5 case => ? ; eexists ; eauto. todo "Show tSort ℓ1 has some type. Should be easy".
       + collect A ηA. collect b ηbA.
-        todo "just some bookkeeping".
+        todo "should be an easy lookup now".
 
     - move=> na A b ℓ B IH HA IHA Hb IHb HB IHB Hwf HΣ HT H.
       simp trans.
       collect b ηb ; collect B ηB ; collect A ηA.
-      todo "lambda case".
+      collect A foo ; (have: foo = ηA by todo "this step should work by `collect` alone...") ; move=> -> ; clear foo.
+      econstructor.
+      + apply: IHA ; last done. todo "show tSort ℓ is welltyped, this should be easy".
+      + todo "this needs some massaging, then it should follow from IHb".
 
-    - todo "let in case".
+    - move=> na b B t ℓ T HΣ Hℓ IH IHb HB IHB Ht IHT Hwf HηΣ Hwt HWT H.
+      simp trans.
+      collect T ηT ; collect t ηt ; collect b ηb ; collect B ηB ; collect b ηb' ; collect B ηB'.
+      have: ηb = ηb'.
+      { unfold ηb, ηb'. apply trans_wt_invariant. constructor. todo "show translation is wf_local". }
+      have: ηB = ηB'.
+      { unfold ηB, ηB'. apply trans_wt_invariant. constructor. todo "show translation is wf_local". }
+      move=> <- <-.
+      econstructor.
+      + apply: IH. todo "show tSort ℓ is welltyped". done.
+      + by apply: HB.
+      + todo "this needs some massaging, then it should follow from IHt".
 
-    - todo "app case".
+    - move=> t na A B u IH Ht IHt Hu IHu HΣ Hwf HηΣ Hwt HWT H.
+      simp trans.
+      collect u ηu. collect t ηt. collect (B{0:=u}) ηB.
+      todo "not sure how to use substitution here...".
 
-    - todo "const case".
+    - move=> cst u decl IH H1 Hdecl Hconsistent HΣ Hwf HηΣ Ht HT H.
+      simp trans.
+      todo "should be an easy lookup".
 
-    - todo "ind case".
+    - move=> ind u mdecl idecl Hdecl IH Hloc Hconsist HΣ Hwf HηΣ Ht HT H.
+      simp trans.
+      todo "should be an easy lookup".
 
     - move=> ind i u mdecl idecl cdecl Hdecl Hdecls IH Hconsistent HΣ Hwf HηΣ Ht HT H.
       simp trans ; cbn.
       set T := type_of _ _ _ _ _ _.
       set t := tConstruct _ _ _.
-      have: Σ ;;; Γ |- eta_expand t T : T. by apply eta_expand_preservation.
+      have: trans _ _ _ _ HT = T by todo "this follows from a lookup in the global env".
+      move=> ->.
+      set ηΣ := trans_env _ _ _ _.
+      set ηΓ := trans_ctx _ _ _ _.
+      todo "this should be applicable, but I get an error with extraction_checker_flags...".
+      (* apply (eta_expand_preservation ηΣ ηΓ t T). *)
 
-
-
-  Lemma trans_preservation Σ Γ tm ty HΣ HηΣ Htm Hty :
-    let ηΣ  := trans_env Σ Γ HΣ in
-    let ηΓ  := trans_ctx ηΣ Γ HηΣ in
-    let ηtm := trans ηΣ ηΓ HηΣ tm Htm in
-    let ηty := trans ηΣ ηΓ HηΣ tm Hty in
-
-     Σ ;;;  Γ |-  tm :  ty ->
-    ηΣ ;;; ηΓ |- ηtm : ηty.
-
-  Proof.
-
-    cbn.
-    move: HΣ HηΣ Htm Hty.
-    pattern ty, tm, Γ, Σ.
-
-    eapply typing_ind_env.
-
-
-    cbn ; elim {Γ tm ty} => Γ.
-    all: set ηΓ := trans_ctx _ Γ _.
-    all: set ηΣ := trans_env Σ _ _.
-
-    - move=> n d Hwf Hnth HηΣ Htm Hty ; simp trans.
-      todo "use other induction principle".
-
-    - move=> ℓ Hwf ℓ_in_Σℓs > ; simp trans.
-      constructor.
-      + by apply trans_env_wf_local.
-      + by rewrite -trans_env_global_ext_levels.
-
-    - move=> x A B ℓ1 ℓ2 HA IHA HB IHB > ; simp trans.
-      constructor.
-      + apply: IHA. todo "Should be easy to show...".
-      + collect A ηA ; collect B ηB.
-
-    - move=> n d Hwf_local HΓ >.
+    - move=> ind u npar p c brs args mdecl idecl Idecl IH Hlocal Hnpar Hfirst ps pty Hbuild Hp IHp.
+      move=> Hlev Hc Hcofinite IHc btys Hmap_opton HAll2.
+      move=> HΣ Hwf HηΣ Ht HT Hcase.
       simp trans.
-      rewrite trans_lift0.
-      + move=> ?.
-        todo "???".
-      + todo "should be easy".
-    - move=> * ; simp trans.
-      constructor.
-      + by apply: trans_env_wf_local.
-      + by rewrite -trans_env_global_ext_levels.
-    - move=> x A B ℓ1 ℓ2 _ IHA _ IHB > ; simp trans.
-      constructor.
-      + apply: IHA. admit. (*TODO: should be easy*)
-      + todo "IH has new Γ in trans of Σ".
-    - move=> x A b ℓ B ? IHA ? IHb HηΣ Htm Hty ; simp trans.
-      rewrite (trans_wt_invariant _ _ _ A
-                                  (trans_obligation_4 _ _ _ _ _ _ Htm)
-                                  (trans_obligation_2 _ _ _ _ _ _ Hty)).
-      econstructor.
-      + apply: IHA. admit. (*TODO: should be easy*)
-      + todo "IH has new Γ in trans of Σ".
-    - move=> x b B t ℓ A ? IHB ? IHb ? IHA ? Htm Hty.
+      collect p ηp ; collect c ηc.
+      todo "handling the branches seems like some work because we iterate over them".
+
+    - move=> p c u mdecl idecl pdecl Hdecl args Hforall Hlocal Hc IHc Hargs Hpdecl HΣ Hwf HηΣ Ht HT H.
       simp trans.
-      prettify b ηb ;
-      prettify B ηB ;
-      prettify t ηt ;
-      prettify A ηA.
-      apply type_LetIn with (s1:=ℓ).
-      + apply: IHB. admit. (*TODO: should be easy*)
-      + apply: IHb.
-      + todo "IH has new Γ in trans of Σ".
-    - move=> t x A B u ? IHt ? IHu HηΣ Htm Hty.
+      collect c ηc.
+      todo "handling projection seems like some work".
+
+    - move=> mfix n decl ctx Hguard Hlocal IH Hall1 Hall2 Hwffix HΣ Hwf HηΣ Ht HT Hmfix.
       simp trans.
-      rewrite trans_subst1.
-      + move=> ?. prettify u ηu. prettify t ηt.
-        apply type_App with (na:=x) (A0:=A).
-        * have Hηt: welltyped ηΣ ηΓ t.
-          { case: (HηΣ) => -[]*. case: (Htm) => ? /inversion_App [] //= ?. do 4 case => ?. by eexists ; eauto. }
-          move: IHt => /(_ HηΣ Hηt).
-          admit. (* TODO: should be easy *)
-        * todo "ηu should have type ηA".
-      + todo "welltyped".
-    - move=> *. simp trans. todo "what is going on?".
-    - todo "same as above".
-    - move=> ind i u Hwf body idecl cdecl Hconstr Hconsistent HηΣ Htm Hty.
+      todo "handling fixpoints seems like work because we iterate over them".
+
+    - move=> mfix n decl ctx Hguard Hlocal IH Hall1 Hall2 Hwffix HΣ Hwf HηΣ Ht HT Hmfix.
       simp trans.
-      todo "hard case".
-    - move=> *.
-      simp trans.
-      todo "???".
-    - move=> *.
-      simp trans.
-      todo "handle subst".
-    - move=> *. simp trans. todo "this is not true".
-    - move=> *. simp trans. todo "this is not true".
+      todo "handling fixpoints seems like work because we iterate over them".
+
+    - move=> t A B Hlocal HA IHA Harity Hlt HΣ Hwf HηΣ Hwt HWT Ht.
+      todo "should be an easy lookup".
+
   Admitted.
 
-
-End EtaExpansionFacts.
+End TransFacts.
 
