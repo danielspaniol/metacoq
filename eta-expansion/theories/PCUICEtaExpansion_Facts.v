@@ -6,21 +6,6 @@ From MetaCoq.EtaExpansion Require Import PCUICEtaExpansion_Defs.
 From Coq Require Import Program ssreflect.
 
 (*******************************************************************************
- * Translation of the local context
- ******************************************************************************)
-
-Section TransCtxFacts.
-
-  Local Existing Instance extraction_checker_flags.
-
-  Context (Σ : global_env_ext) (HΣ : ∥ wf_ext Σ ∥).
-  Context (Γ : context).
-
-  Let ηΓ := trans_ctx Σ Γ HΣ.
-
-End TransCtxFacts.
-
-(*******************************************************************************
  * Translation of the global environment
  ******************************************************************************)
 
@@ -29,20 +14,10 @@ Section TransEnvFacts.
   Local Existing Instance extraction_checker_flags.
 
   Context (Σ : global_env_ext) (HΣ : ∥ wf_ext Σ ∥).
-  Context (Γ : context).
+  Context (Γ : context) (Hwf : ∥ wf_local Σ Γ∥).
 
-  Let ηΓ := trans_ctx Σ Γ HΣ.
-  Let ηΣ := trans_env Σ Γ HΣ.
-
-  Lemma trans_env_wf_local :
-    wf_local Σ Γ -> wf_local ηΣ ηΓ.
-  Proof.
-  Admitted.
-
-  Lemma trans_env_wf_ext :
-    ∥ wf_ext Σ ∥ -> ∥ wf_ext ηΣ ∥.
-  Proof.
-  Admitted.
+  Let ηΓ := trans_ctx Σ Γ HΣ Hwf.
+  Let ηΣ := trans_env Σ Γ HΣ Hwf.
 
   Lemma trans_env_global_ext_levels :
     global_ext_levels Σ = global_ext_levels ηΣ.
@@ -60,33 +35,10 @@ Section HelperFacts.
   Local Existing Instance extraction_checker_flags.
 
   Context (Σ : global_env_ext) (HΣ : ∥ wf_ext Σ ∥).
-  Context (Γ : context).
+  Context (Γ : context) (Hwf : ∥ wf_local Σ Γ∥).
 
   Lemma trans_wt_invariant tm Htm1 Htm2 :
     trans Σ Γ HΣ tm Htm1 = trans Σ Γ HΣ tm Htm2.
-  Proof.
-    case: HΣ => -[]*.
-    elim: tm Htm1 Htm2.
-    - move=> * ; simp trans. reflexivity.
-    - move=> * ; simp trans. reflexivity.
-    - todo "better induction principle needed".
-    - move=> * ; simp trans. reflexivity.
-    - move=> na A IHA B IHB H1 H2 ; simp trans.
-      have HA : welltyped Σ Γ A by case: H1 => ? /inversion_Prod [] // ; (do 6 case => ?) ; eexists ; eauto.
-      have HB : welltyped Σ (Γ,, vass na A) B by case: H1 => ? /inversion_Prod [] // ; (do 6 case => ?) ; eexists ; eauto.
-  Admitted.
-
-  Lemma trans_subst1 u v H1 H2 :
-    trans Σ Γ HΣ (subst1 u 0 v) H1 = subst1 (trans Σ Γ HΣ u H2) 0 v.
-  Proof.
-  Admitted.
-
-  Lemma trans_lift n k v H1 H2 :
-    trans Σ Γ HΣ (lift n k v) H1 = lift n k (trans Σ Γ HΣ v H2).
-  Proof. Admitted.
-
-  Lemma trans_lift0 n v H1 H2 :
-    trans Σ Γ HΣ (PCUICLiftSubst.lift n 0 v) H1 = PCUICLiftSubst.lift 0 n (trans Σ Γ HΣ v H2).
   Proof.
   Admitted.
 
@@ -96,20 +48,19 @@ Section EtaExpandFacts.
 
   Local Existing Instance extraction_checker_flags.
 
-End EtaExpandFacts.
-
-  Local Existing Instance extraction_checker_flags.
-
-  Lemma eta_expand_preservation_prop : env_prop
-     (fun Σ Γ tm ty => Σ ;;; Γ |- tm : ty -> Σ ;;; Γ |- (eta_expand tm ty 0) : ty)
-     (fun Σ Γ _ => wf_local Σ Γ).
+  Lemma eta_expand_preservation Σ Γ t T :
+    Σ ;;; Γ |- t : T ->
+    Σ ;;; Γ |- eta_expand t T : T.
   Proof.
-    apply: typing_ind_env => Σ Hwf Γ Hwf_local //=.
-    - move=> n decl Hnth _ IH.
-      todo "is this the second argument?".
-    - move=> na A b ℓ *. todo "".
-    - move=> t na A B u *. 
+    elim: T => //=.
+    move=> na A HA B HB H.
+    econstructor.
+    - todo "should be easy".
+    - todo "???".
   Admitted.
+
+
+End EtaExpandFacts.
 
 Section TransFacts.
 
@@ -126,36 +77,60 @@ Section TransFacts.
   Lemma trans_preservation_prop `{cf : checker_flags} :
     env_prop
       (fun Σ Γ t T =>
-         forall HΣ HηΣ Ht HT,
-         let ηΣ := trans_env Σ Γ HΣ in
-         let ηΓ := trans_ctx Σ Γ HΣ in
+         forall HΣ Hwf HηΣ Ht HT,
+         let ηΣ := trans_env Σ Γ HΣ Hwf in
+         let ηΓ := trans_ctx Σ Γ HΣ Hwf in
          let ηt := trans     ηΣ ηΓ HηΣ t Ht in
          let ηT := trans     ηΣ ηΓ HηΣ T HT in
           Σ ;;;  Γ |-  t :  T ->
          ηΣ ;;; ηΓ |- ηt : ηT)
       (fun Σ Γ _ =>
-         forall HΣ,
-         let ηΣ := trans_env Σ Γ HΣ in
-         let ηΓ := trans_ctx Σ Γ HΣ in
+         forall HΣ Hwf,
+         let ηΣ := trans_env Σ Γ HΣ Hwf in
+         let ηΓ := trans_ctx Σ Γ HΣ Hwf in
          wf_local ηΣ ηΓ).
   Proof.
     cbn ; apply: typing_ind_env => Σ wfΣ Γ wfΓ.
+
     - todo "what is this?".
-    - move=> n d nth_decl IH HΣ Ht HT H.
+
+    - move=> n d nth_decl IH Hwf HΣ Ht HT H /inversion_Rel.
+      do 3 case => ?.
       simp trans.
       todo "I have no idea...".
-    - move=> ℓ IH ℓ_in_ℓs HΣ Ht HT H.
+
+    - move=> ℓ IH ℓ_in_ℓs Hwf HΣ Ht HT H ?.
       simp trans. constructor.
       + apply: IH.
       + by rewrite -trans_env_global_ext_levels.
-    - move=> na A b ℓ1 ℓ2 IH HA IHA HB IHB HΣ HηΣ Ht HT H.
+
+    - move=> na A b ℓ1 ℓ2 IH HA IHA HB IHB Hwf HΣ HηΣ Ht HT H.
       simp trans. constructor.
       + apply: IHA ; last done.
         case: Ht => ? /inversion_Prod [].
-        * todo "this should be easy...".
-        * do 5 case => ? ; eexists ; eauto. todo "this should be easy".
-      + collect A ηA. collect b ηb.
+        * todo "just some bookkeeping".
+        * do 5 case => ? ; eexists ; eauto. todo "just some bookkeeping".
+      + collect A ηA. collect b ηbA.
+        todo "just some bookkeeping".
 
+    - move=> na A b ℓ B IH HA IHA Hb IHb HB IHB Hwf HΣ HT H.
+      simp trans.
+      collect b ηb ; collect B ηB ; collect A ηA.
+      todo "lambda case".
+
+    - todo "let in case".
+
+    - todo "app case".
+
+    - todo "const case".
+
+    - todo "ind case".
+
+    - move=> ind i u mdecl idecl cdecl Hdecl Hdecls IH Hconsistent HΣ Hwf HηΣ Ht HT H.
+      simp trans ; cbn.
+      set T := type_of _ _ _ _ _ _.
+      set t := tConstruct _ _ _.
+      have: Σ ;;; Γ |- eta_expand t T : T. by apply eta_expand_preservation.
 
 
 

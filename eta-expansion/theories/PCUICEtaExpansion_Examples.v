@@ -56,6 +56,8 @@ MetaCoq Run (testη (@cons)).
 (*=> (fun (A : Type) (H : A) (H0 : list A) => @cons A H H0) *)
 MetaCoq Run (testη (@nil)).
 (*=> (fun A : Type => @nil A) *)
+MetaCoq Run (testη (fun ns => map S ns)).
+(*=> (fun ns : list nat => @map nat nat (fun H : nat => S H) ns) *)
 
 MetaCoq Run (testη (@Vector.cons)).
 (*=> (fun (A : Type) (h : A) (n : nat) (H : VectorDef.t A n) => VectorDef.cons A h n H)*)
@@ -71,9 +73,26 @@ MetaCoq Run (testη (if 1 is 0 then bool else Vector.t (list (Vector.t bool 1)) 
      | S _ => VectorDef.t (list (VectorDef.t bool ((fun H : nat => S H) O))) ((fun H : nat => S H) ((fun H : nat => S H) O))
      end *)
 
-Inductive rosetree T := mkTree of T & list $ rosetree T.
-MetaCoq Run (testη mkTree).
-(*=> (fun (T : Type) (H : T) (H0 : list (rosetree T)) => mkTree T H H0) *)
+Inductive rosetree (T : Type) := node of list (rosetree T) & T.
+MetaCoq Run (testη (
+                 fix depth {T} (t : rosetree T) :=
+                   match t with
+                   | node children _ =>
+                     1 + fold_left (fun acc cur => Nat.max acc cur) (List.map depth children) 0
+                   end
+            )).
+(*=> (fix depth (T : Type) (t : rosetree T) {struct t} : nat :=
+   match t with
+   | @node _ _ children =>
+       Init.Nat.add ((fun H : nat => S H) O)
+         (@fold_left nat nat (fun acc cur : nat => Init.Nat.max acc cur)
+            (@map (rosetree T) nat (depth T) children) O)
+   end) *)
+MetaCoq Run (testη (fun (ns : list nat) => List.map (node nat []) ns)).
+(*=> (fun ns : list nat =>
+ @map nat (rosetree nat)
+   ((fun (T : Type) (H : list (rosetree T)) (H0 : T) => node T H H0) nat
+      ((fun A : Type => @nil A) (rosetree nat))) ns) *)
 
 Inductive SN {X} (R : X -> X -> Prop) x := sn of forall y, R x y -> SN R y.
 MetaCoq Run (testη (@sn)).
